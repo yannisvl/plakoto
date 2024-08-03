@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backgammon Board</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #2c3e50;
+            color: white;
+            margin: 0;
+            padding: 20px;
+        }
+        #board {
+            display: grid;
+            grid-template-columns: repeat(12, 50px);
+            grid-template-rows: 150px 20px 150px; /* 20px gap row for spacing */
+            gap: 2px;
+            border: 2px solid #000;
+            padding: 10px;
+            background-color: #2c3e50;
+            position: relative;
+        }
+        .point {
+            width: 50px;
+            height: 150px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            border: 1px solid #000;
+        }
+        .top-row {
+            transform: rotate(180deg); /* Rotate the entire row */
+        }
+        .top-row .point {
+            transform: rotate(180deg); /* Rotate the points back to normal */
+        }
+        .top-row .checker {
+            transform: rotate(180deg); /* Rotate checkers back to normal */
+        }
+        .top-row .point:nth-child(odd),
+        .bottom-row .point:nth-child(even) {
+            background-color: #3498db;
+        }
+        .top-row .point:nth-child(even),
+        .bottom-row .point:nth-child(odd) {
+            background-color: #2980b9;
+        }
+        .bar {
+            grid-column: span 12;
+            height: 20px;
+            background-color: #34495e;
+        }
+        .half-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            height: 100%;
+            width: 2px;
+            background-color: #ecf0f1;
+            transform: translateX(-50%);
+        }
+        .checker {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-bottom: 2px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .checker.red {
+            background-color: red;
+        }
+        .checker.blue {
+            background-color: blue;
+        }
+        .checker-count {
+            position: absolute;
+            bottom: 10px;
+            color: white;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px #000;
+        }
+        #dice-container {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #dice-result {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="board">
+        <!-- Top Row (points 0-11) -->
+        <div class="point top-row" id="point-0">
+            <div class="checker red"></div>
+            <div class="checker red"></div>
+            <div class="checker red"></div>
+            <div class="checker red"></div>
+            <div class="checker red"></div>
+            <div class="checker-count">15</div>
+        </div>
+        <div class="point top-row" id="point-1"></div>
+        <div class="point top-row" id="point-2"></div>
+        <div class="point top-row" id="point-3"></div>
+        <div class="point top-row" id="point-4"></div>
+        <div class="point top-row" id="point-5"></div>
+        <div class="point top-row" id="point-6"></div>
+        <div class="point top-row" id="point-7"></div>
+        <div class="point top-row" id="point-8"></div>
+        <div class="point top-row" id="point-9"></div>
+        <div class="point top-row" id="point-10"></div>
+        <div class="point top-row" id="point-11"></div>
+        
+        <!-- Bar between rows -->
+        <div class="bar"></div>
+        
+        <!-- Bottom Row (points 12-23) -->
+        <div class="point bottom-row" id="point-23">
+            <div class="checker blue"></div>
+            <div class="checker blue"></div>
+            <div class="checker blue"></div>
+            <div class="checker blue"></div>
+            <div class="checker blue"></div>
+            <div class="checker-count">15</div>
+        </div>
+        <div class="point bottom-row" id="point-22"></div>
+        <div class="point bottom-row" id="point-21"></div>
+        <div class="point bottom-row" id="point-20"></div>
+        <div class="point bottom-row" id="point-19"></div>
+        <div class="point bottom-row" id="point-18"></div>
+        <div class="point bottom-row" id="point-17"></div>
+        <div class="point bottom-row" id="point-16"></div>
+        <div class="point bottom-row" id="point-15"></div>
+        <div class="point bottom-row" id="point-14"></div>
+        <div class="point bottom-row" id="point-13"></div>
+        <div class="point bottom-row" id="point-12"></div>
+        
+        <!-- Half-line separator -->
+        <div class="half-line"></div>
+    </div>
+
+    <div id="dice-container">
+        <button onclick="rollDice()">Roll Dice</button>
+        <div id="dice-result">Roll the dice to move the pawn</div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
