@@ -10,6 +10,8 @@ let bearedOff = {
     red: 0,
     blue: 0
 };
+let moveHistory = []; // Stack for saving the state before each turn
+let turnHistory = []; // Stack for storing moves made in the current turn
 
 function rollDice() {
     const die1 = Math.floor(Math.random() * 6) + 1;
@@ -20,6 +22,9 @@ function rollDice() {
     }
     document.getElementById('dice-result').textContent = `Dice: ${dice.join(', ')} (Total: ${dice.reduce((a, b) => a + b)})`;
     document.getElementById('dice-result').textContent += ` - ${currentTurn} to move. Click on a checker column to move.`;
+
+    turnHistory = []; // Clear turn history for new dice roll
+    saveGameState(); // Save the state at the start of the turn
 }
 
 function initializeBoard() {
@@ -32,20 +37,75 @@ function initializeBoard() {
 
 function handlePointClick(pointIndex) {
     if (positions[currentTurn][pointIndex] > 0 && dice.length > 0) {
+        saveTurnState(); // Save the state before making each move within a turn
+
         const steps = dice.shift();
         validBearOff = false;
         if (canBearOff(currentTurn))
             validBearOff = bearOff(currentTurn, pointIndex, steps);
         
+        let validMove = false;
         if (!validBearOff)
             validMove = moveChecker(currentTurn, pointIndex, steps);
         
-        if (validBearOff || validMove){
+        if (validBearOff || validMove) {
             updateBoardDisplay();
-            if (dice.length === 0) {
-                currentTurn = currentTurn === 'red' ? 'blue' : 'red';
-            }
         }
+    }
+}
+
+function saveGameState() {
+    // Save the game state at the start of the player's turn (before any moves)
+    const state = {
+        positions: {
+            red: [...positions.red],
+            blue: [...positions.blue]
+        },
+        bearedOff: { ...bearedOff },
+        dice: [...dice],
+        currentTurn: currentTurn
+    };
+    moveHistory.push(state);
+}
+
+function saveTurnState() {
+    // Save the state of the board after each move within the player's turn
+    const turnState = {
+        positions: {
+            red: [...positions.red],
+            blue: [...positions.blue]
+        },
+        bearedOff: { ...bearedOff },
+        dice: [...dice]
+    };
+    turnHistory.push(turnState);
+}
+
+function undoMove() {
+    if (turnHistory.length > 0) {
+        const lastTurnState = turnHistory.pop(); // Retrieve the last move in the current turn
+
+        // Restore the game state from the last move
+        positions.red = [...lastTurnState.positions.red];
+        positions.blue = [...lastTurnState.positions.blue];
+        bearedOff.red = lastTurnState.bearedOff.red;
+        bearedOff.blue = lastTurnState.bearedOff.blue;
+        dice = [...lastTurnState.dice];
+
+        updateBoardDisplay(); // Update the board display
+    } else {
+        alert('No moves to undo!');
+    }
+}
+
+function validateMoves() {
+    // Confirm the player's moves for this turn and switch to the next player
+    if (dice.length === 0) {
+        turnHistory = []; // Clear the turn history after validation
+        currentTurn = currentTurn === 'red' ? 'blue' : 'red'; // Switch turns
+        document.getElementById('dice-result').textContent = `${currentTurn}'s turn to roll the dice.`;
+    } else {
+        alert('You still have moves left!');
     }
 }
 
@@ -54,7 +114,7 @@ function canBearOff(player) {
     const homeEnd = homeStart + 5;
     const checkersInHome = positions[player].slice(homeStart, homeEnd + 1).reduce((a, b) => a + b);
     let offCheckers = player === 'red' ? bearedOff.red : bearedOff.blue;
-    return  (checkersInHome + offCheckers) === 15;
+    return (checkersInHome + offCheckers) === 15;
 }
 
 function getHomeBoardStart(player) {
@@ -105,12 +165,10 @@ function moveChecker(player, fromIndex, steps) {
     if (toIndex > 23 || toIndex < 0) return false; // Move out of bounds
 
     // Check if the destination has 2 or more checkers from the opponent
-    if (positions[opponent][toIndex] >= 2 || positions[player][fromIndex] == -1 || positions[player][toIndex] == -1) 
+    if (positions[opponent][toIndex] >= 2) 
         return false;
     else if (positions[opponent][toIndex] == 1 && positions[player][toIndex] == 0)
-        positions[opponent][toIndex] = -1;
-    else if (positions[opponent][fromIndex] == -1 && positions[player][fromIndex] == 1)
-        positions[opponent][fromIndex] = 1;
+        positions[opponent][toIndex] = -1; // Send opponent's checker to bar
 
     // Move the player's checker
     positions[player][fromIndex]--;

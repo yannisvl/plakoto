@@ -97,6 +97,10 @@
         #dice-result {
             margin-top: 10px;
         }
+        #controls {
+            display: flex;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>
@@ -151,7 +155,11 @@
     </div>
 
     <div id="dice-container">
-        <button onclick="rollDice()">Roll Dice</button>
+        <div id="controls">
+            <button onclick="rollDice()">Roll Dice</button>
+            <button onclick="undoMove()">Undo Move</button>
+            <button onclick="validateMoves()">Validate Moves</button>
+        </div>
         <div id="dice-result">Roll the dice to move the pawn</div>
     </div>
 
