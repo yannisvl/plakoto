@@ -14,8 +14,12 @@ let moveHistory = []; // Stack for saving the state before each turn
 let turnHistory = []; // Stack for storing moves made in the current turn
 
 function rollDice() {
+    const rollButton = document.querySelector("button[onclick='rollDice()']");
+    rollButton.disabled = true; // Disable the roll button
+
     const die1 = Math.floor(Math.random() * 6) + 1;
     const die2 = Math.floor(Math.random() * 6) + 1;
+
     dice = [die1, die2];
     if (die1 === die2) {
         dice = [die1, die1, die1, die1];
@@ -41,17 +45,34 @@ function handlePointClick(pointIndex) {
 
         const steps = dice.shift();
         validBearOff = false;
-        if (canBearOff(currentTurn))
-            validBearOff = bearOff(currentTurn, pointIndex, steps);
-        
         let validMove = false;
-        if (!validBearOff)
-            validMove = moveChecker(currentTurn, pointIndex, steps);
-        
-        if (validBearOff || validMove) {
-            updateBoardDisplay();
+        while (!validMove && validMoveExists(currentTurn, steps)){
+            if (canBearOff(currentTurn))
+                validBearOff = bearOff(currentTurn, pointIndex, steps);
+            
+            if (!validBearOff)
+                validMove = moveChecker(currentTurn, pointIndex, steps);
+            
+            if (validBearOff || validMove) {
+                updateBoardDisplay();
+            }
         }
     }
+}
+
+function validMoveExists(player, step) {
+    let opponent = player === 'red' ? 'blue' : 'red';
+
+    for (let fromIndex = 0; fromIndex < 24; fromIndex++) {
+        if (positions[player][fromIndex] <= 0) continue;
+        let toIndex = player === 'red' ? fromIndex + step : fromIndex - step;
+
+        if (toIndex >= 0 && toIndex < 24 && 
+            positions[opponent][toIndex] < 2 && positions[player][toIndex] != -1) 
+            return true;
+    }
+
+    return false;
 }
 
 function saveGameState() {
@@ -104,6 +125,9 @@ function validateMoves() {
         turnHistory = []; // Clear the turn history after validation
         currentTurn = currentTurn === 'red' ? 'blue' : 'red'; // Switch turns
         document.getElementById('dice-result').textContent = `${currentTurn}'s turn to roll the dice.`;
+
+        // Enable roll button again
+        document.querySelector("button[onclick='rollDice()']").disabled = false;
     } else {
         alert('You still have moves left!');
     }
@@ -164,11 +188,12 @@ function moveChecker(player, fromIndex, steps) {
 
     if (toIndex > 23 || toIndex < 0) return false; // Move out of bounds
 
-    // Check if the destination has 2 or more checkers from the opponent
     if (positions[opponent][toIndex] >= 2) 
-        return false;
+        return false; //porta
+    else if (positions[player][toIndex] == -1)
+        return false; // plakwmeno
     else if (positions[opponent][toIndex] == 1 && positions[player][toIndex] == 0)
-        positions[opponent][toIndex] = -1; // Send opponent's checker to bar
+        positions[opponent][toIndex] = -1; // plakwse
 
     // Move the player's checker
     positions[player][fromIndex]--;
