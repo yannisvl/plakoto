@@ -163,6 +163,14 @@ function findMinNonZeroIndex(arr) {
     return -1; // Indicates no non-zero elements found
 }
 
+function swapDice() {
+    if (dice.length <= 1) return; // Can't swap after a move
+
+    dice.reverse();
+    document.getElementById('dice-result').textContent = `Dice: ${dice.join(', ')} (Total: ${dice.reduce((a, b) => a + b)})`;
+    document.getElementById('dice-result').textContent += ` - ${currentTurn} to move. Click on a checker column to move.`;
+}
+
 function bearOff(player, fromIndex, steps) {
     let toIndex = player === 'red' ? fromIndex + steps : fromIndex - steps;
     const maxNonZeroIndexRed = findMaxNonZeroIndex(positions.red);
