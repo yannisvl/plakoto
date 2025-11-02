@@ -4,6 +4,7 @@ let positions = {
     red: Array(24).fill(0),
     blue: Array(24).fill(0)
 };
+let hasRolledThisTurn = false; // <- added flag
 positions.red[0] = 15;
 positions.blue[23] = 15;
 let bearedOff = {
@@ -29,6 +30,8 @@ function rollDice() {
 
     turnHistory = []; // Clear turn history for new dice roll
     saveGameState(); // Save the state at the start of the turn
+
+    hasRolledThisTurn = true; // <- mark that the player rolled this turn
 }
 
 function initializeBoard() {
@@ -43,18 +46,27 @@ function handlePointClick(pointIndex) {
     if (positions[currentTurn][pointIndex] > 0 && dice.length > 0) {
         saveTurnState(); // Save the state before making each move within a turn
 
-        const steps = dice.shift();
-        validBearOff = false;
+        const steps = dice[0]; // peek the die, don't shift yet
+        let validBearOff = false;
         let validMove = false;
-        while (!validMove && validMoveExists(currentTurn, steps)){
-            if (canBearOff(currentTurn))
-                validBearOff = bearOff(currentTurn, pointIndex, steps);
-            
-            if (!validBearOff)
-                validMove = moveChecker(currentTurn, pointIndex, steps);
-            
-            if (validBearOff || validMove) {
-                updateBoardDisplay();
+
+        // Try to perform move from the clicked point
+        if (canBearOff(currentTurn)) {
+            validBearOff = bearOff(currentTurn, pointIndex, steps);
+        }
+        if (!validBearOff) {
+            validMove = moveChecker(currentTurn, pointIndex, steps);
+        }
+
+        if (validBearOff || validMove) {
+            updateBoardDisplay();
+            dice.shift(); // Remove the used die
+        } 
+        else {
+            // Check if any move exists with any available die; if none, enable validate
+            const anyValid = dice.some(d => validMoveExists(currentTurn, d));
+            if (!anyValid) {
+                document.getElementById('dice-result').textContent = `No valid move left. You may validate or undo.`;
             }
         }
     }
@@ -62,14 +74,32 @@ function handlePointClick(pointIndex) {
 
 function validMoveExists(player, step) {
     let opponent = player === 'red' ? 'blue' : 'red';
+    const canBear = canBearOff(player);
+    const maxNonZeroIndexRed = findMaxNonZeroIndex(positions.red);
+    const minNonZeroIndexBlue = findMinNonZeroIndex(positions.blue);
 
     for (let fromIndex = 0; fromIndex < 24; fromIndex++) {
         if (positions[player][fromIndex] <= 0) continue;
         let toIndex = player === 'red' ? fromIndex + step : fromIndex - step;
 
-        if (toIndex >= 0 && toIndex < 24 && 
-            positions[opponent][toIndex] < 2 && positions[player][toIndex] != -1) 
+        // regular on-board move
+        if (toIndex >= 0 && toIndex < 24 &&
+            positions[opponent][toIndex] < 2 && positions[player][toIndex] != -1) {
             return true;
+        }
+
+        // bearing off possibilities (allow exact or overshoot from the furthest checker)
+        if (canBear) {
+            if (player === 'red') {
+                if (toIndex >= 24 || (fromIndex === maxNonZeroIndexRed && toIndex >= 24)) {
+                    return true;
+                }
+            } else { // blue
+                if (toIndex <= -1 || (fromIndex === minNonZeroIndexBlue && toIndex <= -1)) {
+                    return true;
+                }
+            }
+        }
     }
 
     return false;
@@ -120,14 +150,22 @@ function undoMove() {
 }
 
 function validateMoves() {
+    // Prevent validating before the player has rolled
+    if (!hasRolledThisTurn) {
+        alert('Please roll the dice before validating your turn.');
+        return;
+    }
+
     // Confirm the player's moves for this turn and switch to the next player
-    if (dice.length === 0) {
+    if (dice.length === 0 || !dice.some(d => validMoveExists(currentTurn, d))) {
         turnHistory = []; // Clear the turn history after validation
         currentTurn = currentTurn === 'red' ? 'blue' : 'red'; // Switch turns
         document.getElementById('dice-result').textContent = `${currentTurn}'s turn to roll the dice.`;
 
         // Enable roll button again
         document.querySelector("button[onclick='rollDice()']").disabled = false;
+
+        hasRolledThisTurn = false; // <- reset for next player
     } else {
         alert('You still have moves left!');
     }
@@ -179,11 +217,25 @@ function bearOff(player, fromIndex, steps) {
     if (player === 'red' && (toIndex == 24 || (fromIndex == maxNonZeroIndexRed && toIndex >= 24))) {
         positions[player][fromIndex]--;
         bearedOff.red += 1;
+
+        // If the player emptied the point and opponent had a plakwma (-1), free it to 1
+        const opponent = 'blue';
+        if (positions[opponent][fromIndex] === -1 && positions[player][fromIndex] === 0) {
+            positions[opponent][fromIndex] = 1;
+        }
+
         return true;
     }
     else if (player === 'blue' && (toIndex == -1 || (fromIndex == minNonZeroIndexBlue && toIndex <= -1))) {
         positions[player][fromIndex]--;
         bearedOff.blue += 1;
+
+        // If the player emptied the point and opponent had a plakwma (-1), free it to 1
+        const opponent = 'red';
+        if (positions[opponent][fromIndex] === -1 && positions[player][fromIndex] === 0) {
+            positions[opponent][fromIndex] = 1;
+        }
+
         return true;
     }
     else
@@ -206,6 +258,12 @@ function moveChecker(player, fromIndex, steps) {
     // Move the player's checker
     positions[player][fromIndex]--;
     positions[player][toIndex]++;
+
+    // If the move emptied the origin point and opponent had a plakwma (-1) there, free the opponent checker to 1
+    if (positions[opponent][fromIndex] === -1 && positions[player][fromIndex] === 0) {
+        positions[opponent][fromIndex] = 1;
+    }
+
     return true;
 }
 
@@ -243,3 +301,25 @@ function updateBoardDisplay() {
 
 // Initialize the board and setup event listeners
 initializeBoard();
+
+window.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return; // ignore shortcuts with modifiers
+    const target = e.target;
+    const tag = target && target.tagName;
+    // don't trigger while typing in inputs or editable elements
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || (target && target.isContentEditable)) return;
+
+    const key = (e.key || '').toLowerCase();
+    if (key === 'r') {
+        const rollBtn = document.querySelector("button[onclick='rollDice()']");
+        if (rollBtn && !rollBtn.disabled) rollDice();
+    } else if (key === 'v') {
+        const validateBtn = document.querySelector("button[onclick='validateMoves()']");
+        if (validateBtn && !validateBtn.disabled) validateMoves();
+    } else if (key === 'u') {
+        undoMove();
+    } else if (key === 's') {
+        const swapBtn = document.querySelector("button[onclick='swapDice()']");
+        if (swapBtn && !swapBtn.disabled) swapDice();
+    }
+});
