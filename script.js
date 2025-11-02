@@ -5,6 +5,7 @@ let positions = {
     blue: Array(24).fill(0)
 };
 let hasRolledThisTurn = false; // <- added flag
+let gameOver = false; // <-- new: stops further input when true
 positions.red[0] = 15;
 positions.blue[23] = 15;
 let bearedOff = {
@@ -15,6 +16,8 @@ let moveHistory = []; // Stack for saving the state before each turn
 let turnHistory = []; // Stack for storing moves made in the current turn
 
 function rollDice() {
+    if (gameOver) return; // no rolls after game end
+
     const rollButton = document.querySelector("button[onclick='rollDice()']");
     rollButton.disabled = true; // Disable the roll button
 
@@ -43,6 +46,8 @@ function initializeBoard() {
 }
 
 function handlePointClick(pointIndex) {
+    if (gameOver) return; // ignore clicks after game end
+
     if (positions[currentTurn][pointIndex] > 0 && dice.length > 0) {
         saveTurnState(); // Save the state before making each move within a turn
 
@@ -144,6 +149,20 @@ function undoMove() {
         dice = [...lastTurnState.dice];
 
         updateBoardDisplay(); // Update the board display
+
+        // Restore dice label so the roll reappears after undo
+        const diceResultEl = document.getElementById('dice-result');
+        if (dice && dice.length > 0) {
+            diceResultEl.textContent = `Dice: ${dice.join(', ')} (Total: ${dice.reduce((a, b) => a + b)}) - ${currentTurn} to move. Click on a checker column to move.`;
+            // keep roll button disabled while in-turn
+            const rollBtn = document.querySelector("button[onclick='rollDice()']");
+            if (rollBtn) rollBtn.disabled = true;
+        } else {
+            diceResultEl.textContent = `${currentTurn}'s turn to roll the dice.`;
+            // if there are no dice, allow rolling again
+            const rollBtn = document.querySelector("button[onclick='rollDice()']");
+            if (rollBtn) rollBtn.disabled = false;
+        }
     } else {
         alert('No moves to undo!');
     }
@@ -211,10 +230,10 @@ function swapDice() {
 
 function bearOff(player, fromIndex, steps) {
     let toIndex = player === 'red' ? fromIndex + steps : fromIndex - steps;
-    const maxNonZeroIndexRed = findMaxNonZeroIndex(positions.red);
-    const minNonZeroIndexBlue = findMinNonZeroIndex(positions.blue);
+    const minNonZeroIndexRed = findMinNonZeroIndex(positions.red);
+    const maxNonZeroIndexBlue = findMaxNonZeroIndex(positions.blue);
 
-    if (player === 'red' && (toIndex == 24 || (fromIndex == maxNonZeroIndexRed && toIndex >= 24))) {
+    if (player === 'red' && (toIndex == 24 || (fromIndex == minNonZeroIndexRed && toIndex >= 24))) {
         positions[player][fromIndex]--;
         bearedOff.red += 1;
 
@@ -224,9 +243,10 @@ function bearOff(player, fromIndex, steps) {
             positions[opponent][fromIndex] = 1;
         }
 
+        checkForWinner(); // <-- check after bearing off
         return true;
     }
-    else if (player === 'blue' && (toIndex == -1 || (fromIndex == minNonZeroIndexBlue && toIndex <= -1))) {
+    else if (player === 'blue' && (toIndex == -1 || (fromIndex == maxNonZeroIndexBlue && toIndex <= -1))) {
         positions[player][fromIndex]--;
         bearedOff.blue += 1;
 
@@ -236,6 +256,7 @@ function bearOff(player, fromIndex, steps) {
             positions[opponent][fromIndex] = 1;
         }
 
+        checkForWinner(); // <-- check after bearing off
         return true;
     }
     else
@@ -323,3 +344,19 @@ window.addEventListener('keydown', (e) => {
         if (swapBtn && !swapBtn.disabled) swapDice();
     }
 });
+
+// New helper: announce winner and disable further input
+function checkForWinner() {
+    if (bearedOff.red === 15 || bearedOff.blue === 15) {
+        gameOver = true;
+        const winner = bearedOff.red === 15 ? 'red' : 'blue';
+        document.getElementById('dice-result').textContent = `Game over — ${winner.toUpperCase()} wins!`;
+        // Disable UI buttons
+        const rollBtn = document.querySelector("button[onclick='rollDice()']");
+        const validateBtn = document.querySelector("button[onclick='validateMoves()']");
+        const swapBtn = document.querySelector("button[onclick='swapDice()']");
+        if (rollBtn) rollBtn.disabled = true;
+        if (validateBtn) validateBtn.disabled = true;
+        if (swapBtn) swapBtn.disabled = true;
+    }
+}

@@ -74,6 +74,8 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            position: relative;    /* <-- added so z-index works */
+            z-index: 1;            /* <-- keep checkers below the count label */
         }
         .checker.red {
             background-color: red;
@@ -87,6 +89,11 @@
             color: white;
             font-weight: bold;
             text-shadow: 1px 1px 2px #000;
+            z-index: 50;                         /* <-- ensure label is on top */
+            background: rgba(0,0,0,0.45);        /* <-- optional: improves readability */
+            padding: 2px 6px;
+            border-radius: 8px;
+            pointer-events: none;                /* <-- don't block clicks on the point */
         }
         #dice-container {
             margin-top: 20px;
