@@ -4,7 +4,6 @@ let positions = {
     red: Array(24).fill(0),
     blue: Array(24).fill(0)
 };
-let hasRolledThisTurn = false; // <- added flag
 let gameOver = false; // <-- new: stops further input when true
 positions.red[0] = 15;
 positions.blue[23] = 15;
@@ -51,7 +50,6 @@ function rollDice(instant = false) {
 
     turnHistory = []; // Clear turn history for new dice roll
     saveGameState(); // Save the state at the start of the turn
-    hasRolledThisTurn = true;
 }
 
 function initializeBoard() {
@@ -172,19 +170,12 @@ function undoMove() {
 }
 
 function validateMoves() {
-    // Prevent validating before the player has rolled
-    if (!hasRolledThisTurn) {
-        alert('Please roll the dice before validating your turn.');
-        return;
-    }
-
     // Confirm the player's moves for this turn and switch to the next player
     if (dice.length === 0 || !dice.some(d => validMoveExists(currentTurn, d))) {
         turnHistory = []; // Clear the turn history after validation
         currentTurn = currentTurn === 'red' ? 'blue' : 'red'; // Switch turns
         document.getElementById('dice-result').textContent = `${currentTurn}'s turn to roll the dice.`;
 
-        hasRolledThisTurn = false; // <- reset for next player
         // auto-roll for next player (shows rolling effect briefly)
         setTimeout(() => rollDice(), 50);
     } else {
@@ -366,7 +357,6 @@ function saveGameToFile() {
         bearedOff: { ...bearedOff },
         dice: [...dice],
         currentTurn: currentTurn,
-        hasRolledThisTurn: !!hasRolledThisTurn,
         gameOver: !!gameOver
     };
 
@@ -423,7 +413,6 @@ function handleLoadFileInput(e) {
             bearedOff.blue = obj.bearedOff && typeof obj.bearedOff.blue === 'number' ? obj.bearedOff.blue : 0;
             dice = Array.isArray(obj.dice) ? obj.dice.slice() : [];
             currentTurn = obj.currentTurn === 'blue' ? 'blue' : 'red';
-            hasRolledThisTurn = !!obj.hasRolledThisTurn || (dice && dice.length > 0);
             gameOver = !!obj.gameOver;
 
             // Clear histories (loaded state becomes base)
