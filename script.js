@@ -15,12 +15,30 @@ let bearedOff = {
 let moveHistory = []; // Stack for saving the state before each turn
 let turnHistory = []; // Stack for storing moves made in the current turn
 
-function rollDice() {
+function rollDice(instant = false) {
     if (gameOver) return; // no rolls after game end
 
-    const rollButton = document.querySelector("button[onclick='rollDice()']");
-    rollButton.disabled = true; // Disable the roll button
+    const diceResultEl = document.getElementById('dice-result');
 
+    // Show a short "rolling" effect before producing the final dice result
+    if (!instant) {
+        const duration = 600; // ms
+        const interval = 60;  // ms between temporary random displays
+        const timer = setInterval(() => {
+            const a = Math.floor(Math.random() * 6) + 1;
+            const b = Math.floor(Math.random() * 6) + 1;
+            diceResultEl.textContent = `Rolling... ${a}, ${b}`;
+        }, interval);
+
+        setTimeout(() => {
+            clearInterval(timer);
+            rollDice(true); // produce the actual roll
+        }, duration);
+
+        return;
+    }
+
+    // Actual roll
     const die1 = Math.floor(Math.random() * 6) + 1;
     const die2 = Math.floor(Math.random() * 6) + 1;
 
@@ -28,13 +46,12 @@ function rollDice() {
     if (die1 === die2) {
         dice = [die1, die1, die1, die1];
     }
-    document.getElementById('dice-result').textContent = `Dice: ${dice.join(', ')} (Total: ${dice.reduce((a, b) => a + b)})`;
-    document.getElementById('dice-result').textContent += ` - ${currentTurn} to move. Click on a checker column to move.`;
+
+    diceResultEl.textContent = `Dice: ${dice.join(', ')} (Total: ${dice.reduce((a, b) => a + b)}) - ${currentTurn} to move. Click on a checker column to move.`;
 
     turnHistory = []; // Clear turn history for new dice roll
     saveGameState(); // Save the state at the start of the turn
-
-    hasRolledThisTurn = true; // <- mark that the player rolled this turn
+    hasRolledThisTurn = true;
 }
 
 function initializeBoard() {
@@ -149,20 +166,6 @@ function undoMove() {
         dice = [...lastTurnState.dice];
 
         updateBoardDisplay(); // Update the board display
-
-        // Restore dice label so the roll reappears after undo
-        const diceResultEl = document.getElementById('dice-result');
-        if (dice && dice.length > 0) {
-            diceResultEl.textContent = `Dice: ${dice.join(', ')} (Total: ${dice.reduce((a, b) => a + b)}) - ${currentTurn} to move. Click on a checker column to move.`;
-            // keep roll button disabled while in-turn
-            const rollBtn = document.querySelector("button[onclick='rollDice()']");
-            if (rollBtn) rollBtn.disabled = true;
-        } else {
-            diceResultEl.textContent = `${currentTurn}'s turn to roll the dice.`;
-            // if there are no dice, allow rolling again
-            const rollBtn = document.querySelector("button[onclick='rollDice()']");
-            if (rollBtn) rollBtn.disabled = false;
-        }
     } else {
         alert('No moves to undo!');
     }
@@ -181,10 +184,9 @@ function validateMoves() {
         currentTurn = currentTurn === 'red' ? 'blue' : 'red'; // Switch turns
         document.getElementById('dice-result').textContent = `${currentTurn}'s turn to roll the dice.`;
 
-        // Enable roll button again
-        document.querySelector("button[onclick='rollDice()']").disabled = false;
-
         hasRolledThisTurn = false; // <- reset for next player
+        // auto-roll for next player (shows rolling effect briefly)
+        setTimeout(() => rollDice(), 50);
     } else {
         alert('You still have moves left!');
     }
@@ -322,6 +324,8 @@ function updateBoardDisplay() {
 
 // Initialize the board and setup event listeners
 initializeBoard();
+// Auto-roll at the beginning of the game (shows rolling effect)
+setTimeout(() => rollDice(), 200);
 
 window.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return; // ignore shortcuts with modifiers
@@ -331,17 +335,15 @@ window.addEventListener('keydown', (e) => {
     if (tag === 'INPUT' || tag === 'TEXTAREA' || (target && target.isContentEditable)) return;
 
     const key = (e.key || '').toLowerCase();
-    if (key === 'r') {
-        const rollBtn = document.querySelector("button[onclick='rollDice()']");
-        if (rollBtn && !rollBtn.disabled) rollDice();
-    } else if (key === 'v') {
+    if (key === 'v') {
         const validateBtn = document.querySelector("button[onclick='validateMoves()']");
-        if (validateBtn && !validateBtn.disabled) validateMoves();
+        if (validateBtn) validateMoves();
     } else if (key === 'u') {
-        undoMove();
+        const undoBtn = document.querySelector("button[onclick='undoMove()']");
+        if (undoBtn) undoMove();
     } else if (key === 's') {
         const swapBtn = document.querySelector("button[onclick='swapDice()']");
-        if (swapBtn && !swapBtn.disabled) swapDice();
+        if (swapBtn) swapDice();
     }
 });
 
@@ -351,12 +353,99 @@ function checkForWinner() {
         gameOver = true;
         const winner = bearedOff.red === 15 ? 'red' : 'blue';
         document.getElementById('dice-result').textContent = `Game over — ${winner.toUpperCase()} wins!`;
-        // Disable UI buttons
-        const rollBtn = document.querySelector("button[onclick='rollDice()']");
-        const validateBtn = document.querySelector("button[onclick='validateMoves()']");
-        const swapBtn = document.querySelector("button[onclick='swapDice()']");
-        if (rollBtn) rollBtn.disabled = true;
-        if (validateBtn) validateBtn.disabled = true;
-        if (swapBtn) swapBtn.disabled = true;
     }
+}
+
+// --- Save / Load helpers and UI buttons ---
+function saveGameToFile() {
+    const state = {
+        positions: {
+            red: [...positions.red],
+            blue: [...positions.blue]
+        },
+        bearedOff: { ...bearedOff },
+        dice: [...dice],
+        currentTurn: currentTurn,
+        hasRolledThisTurn: !!hasRolledThisTurn,
+        gameOver: !!gameOver
+    };
+
+    const json = JSON.stringify(state, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plakoto-save.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function triggerLoadFromFile() {
+    let input = document.getElementById('plakoto-load-input');
+    if (!input) {
+        input = document.createElement('input');
+        input.type = 'file';
+        input.id = 'plakoto-load-input';
+        input.accept = '.json,application/json';
+        input.style.display = 'none';
+        input.addEventListener('change', handleLoadFileInput);
+        document.body.appendChild(input);
+    }
+    input.value = ''; // reset so same file can be selected again
+    input.click();
+}
+
+function handleLoadFileInput(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+        try {
+            const obj = JSON.parse(ev.target.result);
+
+            // Basic validation
+            if (!obj.positions || !Array.isArray(obj.positions.red) || !Array.isArray(obj.positions.blue)) {
+                alert('Invalid save file (positions).');
+                return;
+            }
+            if (!('dice' in obj) || !('currentTurn' in obj)) {
+                alert('Invalid save file (missing dice or turn).');
+                return;
+            }
+
+            // Apply loaded state
+            positions.red = obj.positions.red.slice(0, 24).concat(Array(Math.max(0, 24 - obj.positions.red.length)).fill(0)).slice(0,24);
+            positions.blue = obj.positions.blue.slice(0, 24).concat(Array(Math.max(0, 24 - obj.positions.blue.length)).fill(0)).slice(0,24);
+            bearedOff.red = obj.bearedOff && typeof obj.bearedOff.red === 'number' ? obj.bearedOff.red : 0;
+            bearedOff.blue = obj.bearedOff && typeof obj.bearedOff.blue === 'number' ? obj.bearedOff.blue : 0;
+            dice = Array.isArray(obj.dice) ? obj.dice.slice() : [];
+            currentTurn = obj.currentTurn === 'blue' ? 'blue' : 'red';
+            hasRolledThisTurn = !!obj.hasRolledThisTurn || (dice && dice.length > 0);
+            gameOver = !!obj.gameOver;
+
+            // Clear histories (loaded state becomes base)
+            moveHistory = [];
+            turnHistory = [];
+
+            updateBoardDisplay();
+
+            // Update dice-result text and button states
+            const diceResultEl = document.getElementById('dice-result');
+            if (gameOver) {
+                checkForWinner(); // will set UI appropriately
+            } else if (dice && dice.length > 0) {
+                diceResultEl.textContent = `Dice: ${dice.join(', ')} (Total: ${dice.reduce((a,b)=>a+b)}) - ${currentTurn} to move. Click on a checker column to move.`;
+            } else {
+                diceResultEl.textContent = `${currentTurn}'s turn to roll the dice.`;
+            }
+
+
+        } catch (err) {
+            alert('Failed to load save file: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
 }
