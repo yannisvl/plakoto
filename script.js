@@ -588,3 +588,72 @@ function getAllValidMoveSequences() {
     // Combine (could contain duplicates)
     return originalSequences.concat(swappedSequences);
 }
+
+function setCustomDice() {
+    if (gameOver) return;
+
+    const diceResultEl = document.getElementById('dice-result');
+    const input = window.prompt("Enter custom dice (e.g. '6 5', '4,4', '3'):");
+    if (input == null) return;
+
+    const parts = input.trim().split(/[\s,;]+/).filter(Boolean);
+    if (parts.length === 0 || parts.length > 2) {
+        alert('Enter one value (for doubles) or two values (1-6).');
+        return;
+    }
+
+    const nums = parts.map(p => parseInt(p, 10)).filter(n => Number.isInteger(n));
+    if (nums.length !== parts.length || nums.some(n => n < 1 || n > 6)) {
+        alert('Values must be integers 1..6.');
+        return;
+    }
+
+    if (nums.length === 1) {
+        const d = nums[0];
+        dice = [d, d, d, d];
+    } else {
+        const [a, b] = nums;
+        dice = (a === b) ? [a, a, a, a] : [a, b];
+    }
+
+    // Reset per-roll state
+    turnHistory = [];
+    mustPlayAllDice = false;
+    tiePlayLargestOnly = false;
+
+    diceResultEl.textContent = `Dice: ${dice.join(', ')} (Total: ${dice.reduce((s,x)=>s+x,0)}) - ${currentTurn} to move. Click on a checker column to move.`;
+
+    // Apply same policy logic as rollDice
+    const fullSequences = getAllValidMoveSequences();
+    if (fullSequences.length > 0) {
+        mustPlayAllDice = true;
+        diceResultEl.textContent += ` You must play all ${dice.length} dice before validating.`;
+        return;
+    }
+
+    if (dice.length === 2 && dice[0] !== dice[1]) {
+        const dA = dice[0], dB = dice[1];
+        const playableA = validMoveExists(currentTurn, dA);
+        const playableB = validMoveExists(currentTurn, dB);
+
+        if (!playableA && !playableB) {
+            diceResultEl.textContent += ` No valid moves. You may validate or undo.`;
+        } else if (playableA && playableB) {
+            tiePlayLargestOnly = true;
+            const largest = Math.max(dA, dB);
+            if (dice[0] !== largest) dice.reverse();
+            diceResultEl.textContent = `Dice: ${dice.join(', ')} (Total: ${dice.reduce((s,x)=>s+x,0)}) - ${currentTurn} to move. Click on a checker column to move. Only one die may be played; must play the higher (${largest}) then you may validate.`;
+        } else {
+            tiePlayLargestOnly = true;
+            const playableDie = playableA ? dA : dB;
+            if (dice[0] !== playableDie) dice.reverse();
+            diceResultEl.textContent = `Dice: ${dice.join(', ')} (Total: ${dice.reduce((s,x)=>s+x,0)}) - ${currentTurn} to move. Click on a checker column to move. Only one die can be played (${playableDie}); after playing it you may validate.`;
+        }
+    } else if (dice.length === 4) {
+        diceResultEl.textContent += ` No sequence uses all 4 dice; play as many as possible then validate.`;
+    } else if (dice.length === 1) {
+        if (!validMoveExists(currentTurn, dice[0])) {
+            diceResultEl.textContent += ` No valid move. You may validate or undo.`;
+        }
+    }
+}
