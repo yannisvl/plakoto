@@ -11,18 +11,20 @@ let bearedOff = {
     red: 0,
     blue: 0
 };
-let moveHistory = []; // Stack for saving the state before each turn
 let turnHistory = []; // Stack for storing moves made in the current turn
+
+// NEW FLAGS
+let mustPlayAllDice = false;        // true when a full sequence (both dice or all 4) is possible
+let tiePlayLargestOnly = false;     // true when only one die should be played (largest) then validation allowed
 
 function rollDice(instant = false) {
     if (gameOver) return; // no rolls after game end
 
     const diceResultEl = document.getElementById('dice-result');
 
-    // Show a short "rolling" effect before producing the final dice result
     if (!instant) {
-        const duration = 600; // ms
-        const interval = 60;  // ms between temporary random displays
+        const duration = 600;
+        const interval = 60;
         const timer = setInterval(() => {
             const a = Math.floor(Math.random() * 6) + 1;
             const b = Math.floor(Math.random() * 6) + 1;
@@ -31,13 +33,12 @@ function rollDice(instant = false) {
 
         setTimeout(() => {
             clearInterval(timer);
-            rollDice(true); // produce the actual roll
+            rollDice(true);
         }, duration);
 
         return;
     }
 
-    // Actual roll
     const die1 = Math.floor(Math.random() * 6) + 1;
     const die2 = Math.floor(Math.random() * 6) + 1;
 
@@ -48,8 +49,50 @@ function rollDice(instant = false) {
 
     diceResultEl.textContent = `Dice: ${dice.join(', ')} (Total: ${dice.reduce((a, b) => a + b)}) - ${currentTurn} to move. Click on a checker column to move.`;
 
-    turnHistory = []; // Clear turn history for new dice roll
-    saveGameState(); // Save the state at the start of the turn
+    turnHistory = [];
+
+    // --- NEW LOGIC: determine play policy ---
+    mustPlayAllDice = false;
+    tiePlayLargestOnly = false;
+
+    const fullSequences = getAllValidMoveSequences(); // sequences that use ALL dice (original or swapped order for non-doubles)
+
+    if (fullSequences.length > 0) {
+        // At least one way to use every die -> must play them all
+        mustPlayAllDice = true;
+        diceResultEl.textContent += ` You must play all ${dice.length} dice before validating.`;
+    } else {
+        // No full sequence exists
+        if (dice.length === 2 && dice[0] !== dice[1]) {
+            const dA = dice[0], dB = dice[1];
+            const playableA = validMoveExists(currentTurn, dA);
+            const playableB = validMoveExists(currentTurn, dB);
+
+            if (!playableA && !playableB) {
+                // No moves at all -> may validate immediately (KEEP DICE SHOWN)
+                diceResultEl.textContent += ` No valid moves. You may validate or undo.`;
+            } else if (playableA && playableB) {
+                // Both dice have at least one move individually but cannot be combined -> play only highest
+                tiePlayLargestOnly = true;
+                const largest = Math.max(dA, dB);
+                if (dice[0] !== largest) dice.reverse(); // put largest first
+                diceResultEl.textContent += ` Only one die may be played; must play the higher (${largest}) then you may validate.`;
+            } else {
+                // Exactly one die playable
+                tiePlayLargestOnly = true;
+                const playableDie = playableA ? dA : dB;
+                if (dice[0] !== playableDie) dice.reverse();
+                diceResultEl.textContent += ` Only one die can be played (${playableDie}); after playing it you may validate.`;
+            }
+        } else if (dice.length === 4) {
+            diceResultEl.textContent += ` No sequence uses all 4 dice; play as many as possible then validate.`;
+        } else {
+            // Single die fallback (KEEP DICE SHOWN)
+            if (!validMoveExists(currentTurn, dice[0])) {
+                diceResultEl.textContent += ` No valid move. You may validate or undo.`;
+            }
+        }
+    }
 }
 
 function initializeBoard() {
@@ -61,16 +104,21 @@ function initializeBoard() {
 }
 
 function handlePointClick(pointIndex) {
-    if (gameOver) return; // ignore clicks after game end
+    if (gameOver) return;
 
     if (positions[currentTurn][pointIndex] > 0 && dice.length > 0) {
-        saveTurnState(); // Save the state before making each move within a turn
+        // Enforce tie rule: if only one die should be played, ensure we only use first die (largest already placed first)
+        if (tiePlayLargestOnly && dice.length > 1) {
+            // We only allow using dice[0]; ignore if user tries after swapping
+            // (swapDice could break ordering; instruct user not to swap in tie)
+        }
 
-        const steps = dice[0]; // peek the die, don't shift yet
+        saveTurnState();
+
+        const steps = dice[0];
         let validBearOff = false;
         let validMove = false;
 
-        // Try to perform move from the clicked point
         if (canBearOff(currentTurn)) {
             validBearOff = bearOff(currentTurn, pointIndex, steps);
         }
@@ -80,13 +128,20 @@ function handlePointClick(pointIndex) {
 
         if (validBearOff || validMove) {
             updateBoardDisplay();
-            dice.shift(); // Remove the used die
-        } 
-        else {
-            // Check if any move exists with any available die; if none, enable validate
-            const anyValid = dice.some(d => validMoveExists(currentTurn, d));
-            if (!anyValid) {
-                document.getElementById('dice-result').textContent = `No valid move left. You may validate or undo.`;
+            dice.shift();
+
+            // If we were in tiePlayLargestOnly mode, allow validation now after first move
+            if (tiePlayLargestOnly) {
+                // Optional UI hint
+                const diceResultEl = document.getElementById('dice-result');
+                if (diceResultEl) {
+                    if (dice.length === 0 || !dice.some(d => validMoveExists(currentTurn, d))) {
+                        diceResultEl.textContent = `Tie resolved. You may validate or undo.`;
+                    } else {
+                        // If remaining die somehow became playable but rule says only higher should be used, allow validation anyway.
+                        diceResultEl.textContent += ` (You may validate now.)`;
+                    }
+                }
             }
         }
     }
@@ -125,20 +180,6 @@ function validMoveExists(player, step) {
     return false;
 }
 
-function saveGameState() {
-    // Save the game state at the start of the player's turn (before any moves)
-    const state = {
-        positions: {
-            red: [...positions.red],
-            blue: [...positions.blue]
-        },
-        bearedOff: { ...bearedOff },
-        dice: [...dice],
-        currentTurn: currentTurn
-    };
-    moveHistory.push(state);
-}
-
 function saveTurnState() {
     // Save the state of the board after each move within the player's turn
     const turnState = {
@@ -171,12 +212,10 @@ function undoMove() {
 
 function validateMoves() {
     // Confirm the player's moves for this turn and switch to the next player
-    if (dice.length === 0 || !dice.some(d => validMoveExists(currentTurn, d))) {
-        turnHistory = []; // Clear the turn history after validation
-        currentTurn = currentTurn === 'red' ? 'blue' : 'red'; // Switch turns
+    if (dice.length === 0 || !dice.some(d => validMoveExists(currentTurn, d)) || (tiePlayLargestOnly && dice.length <= 1)) {
+        turnHistory = [];
+        currentTurn = currentTurn === 'red' ? 'blue' : 'red';
         document.getElementById('dice-result').textContent = `${currentTurn}'s turn to roll the dice.`;
-
-        // auto-roll for next player (shows rolling effect briefly)
         setTimeout(() => rollDice(), 50);
     } else {
         alert('You still have moves left!');
@@ -343,7 +382,7 @@ function checkForWinner() {
     if (bearedOff.red === 15 || bearedOff.blue === 15) {
         gameOver = true;
         const winner = bearedOff.red === 15 ? 'red' : 'blue';
-        document.getElementById('dice-result').textContent = `Game over — ${winner.toUpperCase()} wins!`;
+        alert(`Game over — ${winner.toUpperCase()} wins!`);
     }
 }
 
@@ -415,8 +454,7 @@ function handleLoadFileInput(e) {
             currentTurn = obj.currentTurn === 'blue' ? 'blue' : 'red';
             gameOver = !!obj.gameOver;
 
-            // Clear histories (loaded state becomes base)
-            moveHistory = [];
+            // Clear history (loaded state becomes base)
             turnHistory = [];
 
             updateBoardDisplay();
@@ -437,4 +475,116 @@ function handleLoadFileInput(e) {
         }
     };
     reader.readAsText(file);
+}
+
+/**
+ * Returns an array of all full-length valid move sequences for the current dice.
+ * Each sequence is an array of point indices (0-23), length == dice.length (2 or 4).
+ * The k-th element is the point the player would click to perform the k-th die move
+ * in the current dice order (does NOT try swapped order).
+ * If a full sequence cannot be completed (e.g. second die becomes unusable),
+ * that partial path is discarded (so sequences are only those that use every die).
+ * Global state (positions, bearedOff) is NOT mutated.
+ */
+function getAllValidMoveSequences() {
+    if (!dice || dice.length === 0) return [];
+    const player = currentTurn;
+
+    // Helpers (local copies to avoid mutating global state)
+    function canBearOffLocal(p, pos, off) {
+        const homeStart = p === 'red' ? 18 : 0;
+        const homeEnd = homeStart + 5;
+        const inHome = pos[p].slice(homeStart, homeEnd + 1).reduce((a, b) => a + b, 0);
+        return (inHome + off[p]) === 15;
+    }
+    function findMaxNonZeroIndexLocal(arr) {
+        for (let i = arr.length - 1; i >= 0; i--) if (arr[i] > 0) return i;
+        return -1;
+    }
+    function findMinNonZeroIndexLocal(arr) {
+        for (let i = 0; i < arr.length; i++) if (arr[i] > 0) return i;
+        return -1;
+    }
+    function tryApplyLocal(pos, off, p, fromIndex, die) {
+        if (fromIndex < 0 || fromIndex > 23) return false;
+        if (pos[p][fromIndex] <= 0) return false;
+        const opp = p === 'red' ? 'blue' : 'red';
+        const dir = p === 'red' ? +1 : -1;
+        const toIndex = fromIndex + dir * die;
+
+        // Bearing off
+        if (toIndex < 0 || toIndex > 23) {
+            if (!canBearOffLocal(p, pos, off)) return false;
+            if (p === 'red') {
+                const minIdx = findMinNonZeroIndexLocal(pos.red);
+                if (toIndex === 24 || (fromIndex === minIdx && toIndex > 23)) {
+                    pos[p][fromIndex]--;
+                    off.red += 1;
+                    if (pos[opp][fromIndex] === -1 && pos[p][fromIndex] === 0) pos[opp][fromIndex] = 1;
+                    return true;
+                }
+                return false;
+            } else {
+                const maxIdx = findMaxNonZeroIndexLocal(pos.blue);
+                if (toIndex === -1 || (fromIndex === maxIdx && toIndex < 0)) {
+                    pos[p][fromIndex]--;
+                    off.blue += 1;
+                    if (pos[opp][fromIndex] === -1 && pos[p][fromIndex] === 0) pos[opp][fromIndex] = 1;
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        // Normal move
+        if (pos[opp][toIndex] >= 2) return false;
+        if (pos[p][toIndex] === -1) return false;
+        if (pos[opp][toIndex] === 1 && pos[p][toIndex] === 0) pos[opp][toIndex] = -1; // trap opponent
+        pos[p][fromIndex]--;
+        pos[p][toIndex]++;
+        if (pos[opp][fromIndex] === -1 && pos[p][fromIndex] === 0) pos[opp][fromIndex] = 1;
+        return true;
+    }
+
+    function generateSequencesForOrder(diceOrder) {
+        const basePos = { red: positions.red.slice(), blue: positions.blue.slice() };
+        const baseOff = { red: bearedOff.red, blue: bearedOff.blue };
+        const out = [];
+
+        function dfs(depth, pos, off, seq) {
+            if (depth === diceOrder.length) {
+                out.push(seq.slice());
+                return;
+            }
+            const die = diceOrder[depth];
+            let found = false;
+            for (let from = 0; from < 24; from++) {
+                if (pos[player][from] <= 0) continue;
+                const posClone = { red: pos.red.slice(), blue: pos.blue.slice() };
+                const offClone = { red: off.red, blue: off.blue };
+                if (tryApplyLocal(posClone, offClone, player, from, die)) {
+                    found = true;
+                    seq.push(from);
+                    dfs(depth + 1, posClone, offClone, seq);
+                    seq.pop();
+                }
+            }
+            if (!found) return; // dead end
+        }
+        dfs(0, basePos, baseOff, []);
+        return out;
+    }
+
+    // Original order
+    const originalSequences = generateSequencesForOrder(dice);
+
+    // Swapped order (only if non-doubles of length 2)
+    let swappedSequences = [];
+    if (dice.length === 2 && dice[0] !== dice[1]) {
+        const swapped = [dice[1], dice[0]];
+        swappedSequences = generateSequencesForOrder(swapped);
+    }
+
+    // Combine (could contain duplicates)
+    return originalSequences.concat(swappedSequences);
 }
