@@ -14,10 +14,10 @@ let bearedOff = {
 let turnHistory = []; // Stack for storing moves made in the current turn
 
 // FLAGS
-let mustPlayAllDice = false;        // true when a full sequence (both dice or all 4) is possible
-let tiePlayLargestOnly = false;     // true ONLY when both dice are playable individually but cannot be combined -> must use higher
-let onlyOneDiePlayable = false;     // exactly one die has any legal move -> must use that specific die
-let forcedPlayableDie = null;       // the die that must be played when onlyOneDiePlayable is true
+let mustPlayAllDice = false;        // full sequence must be used
+let singleDieMode = false;          // true => only one die may be played this turn
+let singleDieReason = null;         // 'mustUseHigher' | 'onlyOnePlayable' | null
+let enforcedDie = null;             // die value that must be used when singleDieMode
 
 function rollDice(instant = false) {
     if (gameOver) return; // no rolls after game end
@@ -55,43 +55,41 @@ function rollDice(instant = false) {
 
     // determine play policy ---
     mustPlayAllDice = false;
-    tiePlayLargestOnly = false;
-    onlyOneDiePlayable = false;
-    forcedPlayableDie = null;
+    singleDieMode = false;
+    singleDieReason = null;
+    enforcedDie = null;
 
-    const fullSequences = getAllValidMoveSequences(); // sequences that use ALL dice (original or swapped order for non-doubles)
+    const fullSequences = getAllValidMoveSequences();
 
     if (fullSequences.length > 0) {
-        // At least one way to use every die -> must play them all
         mustPlayAllDice = true;
         diceResultEl.textContent += ` You must play all ${dice.length} dice before validating.`;
     } else {
-        // No full sequence exists
         if (dice.length === 2 && dice[0] !== dice[1]) {
-            const dA = dice[0], dB = dice[1];
+            const [dA, dB] = dice;
             const playableA = validMoveExists(currentTurn, dA);
             const playableB = validMoveExists(currentTurn, dB);
 
             if (!playableA && !playableB) {
-                // No moves at all -> may validate immediately (KEEP DICE SHOWN)
                 diceResultEl.textContent += ` No valid moves. You may validate.`;
             } else if (playableA && playableB) {
-                // Both dice individually playable but cannot be combined -> must play higher
-                tiePlayLargestOnly = true;
-                const largest = Math.max(dA, dB);
-                if (dice[0] !== largest) dice.reverse(); // put largest first
-                diceResultEl.textContent += ` Only one die may be played; must play the higher (${largest}) then you may validate.`;
+                // Both playable but cannot form a full sequence -> rule: use higher only
+                singleDieMode = true;
+                singleDieReason = 'mustUseHigher';
+                enforcedDie = Math.max(dA, dB);
+                if (dice[0] !== enforcedDie) dice.reverse();
+                diceResultEl.textContent += ` Only one die may be played; must play the higher (${enforcedDie}) then you may validate.`;
             } else {
-                // Exactly one die playable -> force that die
-                onlyOneDiePlayable = true;
-                forcedPlayableDie = playableA ? dA : dB;
-                if (dice[0] !== forcedPlayableDie) dice.reverse();
-                diceResultEl.textContent += ` Only one die can be played (${forcedPlayableDie}); after playing it you may validate.`;
+                // Exactly one playable
+                singleDieMode = true;
+                singleDieReason = 'onlyOnePlayable';
+                enforcedDie = playableA ? dA : dB;
+                if (dice[0] !== enforcedDie) dice.reverse();
+                diceResultEl.textContent += ` Only one die can be played (${enforcedDie}); after playing it you may validate.`;
             }
         } else if (dice.length === 4) {
             diceResultEl.textContent += ` No sequence uses all 4 dice; play as many as possible then validate.`;
         } else {
-            // Single die fallback (KEEP DICE SHOWN)
             if (!validMoveExists(currentTurn, dice[0])) {
                 diceResultEl.textContent += ` No valid move. You may validate or undo.`;
             }
@@ -112,7 +110,7 @@ function handlePointClick(pointIndex) {
 
     if (positions[currentTurn][pointIndex] > 0 && dice.length > 0) {
         // Enforce tie rule: both dice playable but only the higher must be used
-        if (tiePlayLargestOnly && dice.length === 2) {
+        if (singleDieMode && dice.length === 2 && singleDieReason === 'mustUseHigher') {
             const largest = Math.max(dice[0], dice[1]);
             const clickedDieNeeded = dice[0]; // the die that would be used (first in array)
             if (clickedDieNeeded !== largest) {
@@ -122,10 +120,13 @@ function handlePointClick(pointIndex) {
         }
 
         // Enforce "only one die is playable" rule
-        if (onlyOneDiePlayable && dice.length === 2) {
-            const clickedDieNeeded = dice[0];
-            if (clickedDieNeeded !== forcedPlayableDie) {
-                alert(`Only one die can be played (${forcedPlayableDie}). Use Swap Dice or undo.`);
+        if (singleDieMode && dice.length === 2) {
+            // die to be used must be first in array (dice[0])
+            if (dice[0] !== enforcedDie) {
+                const msg = (singleDieReason === 'mustUseHigher')
+                    ? `You must play the larger die (${enforcedDie}) first. Use Swap Dice or undo.`
+                    : `Only die ${enforcedDie} is playable. Use Swap Dice or undo.`;
+                alert(msg);
                 return;
             }
         }
@@ -149,18 +150,12 @@ function handlePointClick(pointIndex) {
 
             const diceResultEl = document.getElementById('dice-result');
             if (diceResultEl) {
-                // If we were in tiePlayLargestOnly mode, allow validation now after first move
-                if (tiePlayLargestOnly) {
-                    if (dice.length === 0 || !dice.some(d => validMoveExists(currentTurn, d))) {
-                        diceResultEl.textContent = `Tie resolved. You may validate or undo.`;
-                    } else {
-                        diceResultEl.textContent += ` (You may validate now.)`;
-                    }
-                }
                 // If exactly one die was playable, allow validation now after using it
-                if (onlyOneDiePlayable) {
+                if (singleDieMode) {
                     if (dice.length === 0 || !dice.some(d => validMoveExists(currentTurn, d))) {
-                        diceResultEl.textContent = `Only playable die used. You may validate or undo.`;
+                        diceResultEl.textContent = (singleDieReason === 'mustUseHigher')
+                            ? `Higher die used. You may validate or undo.`
+                            : `Only playable die used. You may validate or undo.`;
                     } else {
                         diceResultEl.textContent += ` (You may validate now.)`;
                     }
@@ -213,9 +208,9 @@ function saveTurnState() {
         bearedOff: { ...bearedOff },
         dice: [...dice],
         mustPlayAllDice: mustPlayAllDice,
-        tiePlayLargestOnly: tiePlayLargestOnly,
-        onlyOneDiePlayable: onlyOneDiePlayable,
-        forcedPlayableDie: forcedPlayableDie
+        singleDieMode: singleDieMode,
+        singleDieReason: singleDieReason,
+        enforcedDie: enforcedDie
     };
     turnHistory.push(turnState);
 }
@@ -231,9 +226,9 @@ function undoMove() {
         bearedOff.blue = lastTurnState.bearedOff.blue;
         dice = [...lastTurnState.dice];
         mustPlayAllDice = lastTurnState.mustPlayAllDice;
-        tiePlayLargestOnly = lastTurnState.tiePlayLargestOnly;
-        onlyOneDiePlayable = !!lastTurnState.onlyOneDiePlayable;
-        forcedPlayableDie = lastTurnState.forcedPlayableDie ?? null;
+        singleDieMode = !!lastTurnState.singleDieMode;
+        singleDieReason = lastTurnState.singleDieReason || null;
+        enforcedDie = (typeof lastTurnState.enforcedDie === 'number') ? lastTurnState.enforcedDie : null;
 
         updateBoardDisplay(); // Update the board display
         updateDiceMessage(); // Update the dice message
@@ -247,8 +242,7 @@ function validateMoves() {
     if (
         dice.length === 0 ||
         !dice.some(d => validMoveExists(currentTurn, d)) ||
-        (tiePlayLargestOnly && dice.length <= 1) ||
-        (onlyOneDiePlayable && dice.length <= 1)
+        (singleDieMode && dice.length <= 1)
     ) {
         turnHistory = [];
         currentTurn = currentTurn === 'red' ? 'blue' : 'red';
@@ -290,14 +284,11 @@ function findMinNonZeroIndex(arr) {
 }
 
 function swapDice() {
-    if (dice.length <= 1) return; // Can't swap after a move
-
-    // If only one die is playable, keep the playable die first
-    if (onlyOneDiePlayable) {
-        alert(`Swap disabled: only die ${forcedPlayableDie} can be played.`);
+    if (dice.length <= 1) return;
+    if (singleDieMode && singleDieReason === 'onlyOnePlayable') {
+        alert(`Swap disabled: only die ${enforcedDie} can be played.`);
         return;
     }
-
     dice.reverse();
     updateDiceMessage();
 }
@@ -310,31 +301,15 @@ function updateDiceMessage() {
 
     if (mustPlayAllDice) {
         diceResultEl.textContent += ` You must play all ${dice.length} dice before validating.`;
-    } else if (tiePlayLargestOnly) {
-        if (dice.length === 2 && dice[0] !== dice[1]) {
-            const dA = dice[0], dB = dice[1];
-            const playableA = validMoveExists(currentTurn, dA);
-            const playableB = validMoveExists(currentTurn, dB);
-
-            if (!playableA && !playableB) {
-                diceResultEl.textContent += ` No valid moves. You may validate or undo.`;
-            } else if (playableA && playableB) {
-                const largest = Math.max(dA, dB);
-                diceResultEl.textContent += ` Only one die may be played; must play the higher (${largest}) then you may validate.`;
+    } else if (singleDieMode) {
+        if (dice.length === 2) {
+            if (singleDieReason === 'mustUseHigher') {
+                diceResultEl.textContent += ` Only one die may be played; must play the higher (${enforcedDie}) then you may validate.`;
             } else {
-                // This branch should not happen under tiePlayLargestOnly anymore
-                const playableDie = playableA ? dA : dB;
-                diceResultEl.textContent += ` Only one die can be played (${playableDie}); after playing it you may validate.`;
+                diceResultEl.textContent += ` Only one die can be played (${enforcedDie}); after playing it you may validate.`;
             }
         } else if (dice.length === 1) {
             diceResultEl.textContent += ` (You may validate now.)`;
-        }
-    } else if (onlyOneDiePlayable) {
-        if (dice.length >= 1) {
-            diceResultEl.textContent += ` Only one die can be played (${forcedPlayableDie}); after playing it you may validate.`;
-            if (dice.length === 1) {
-                diceResultEl.textContent += ` (You may validate now.)`;
-            }
         }
     } else if (dice.length === 4) {
         diceResultEl.textContent += ` No sequence uses all 4 dice; play as many as possible then validate.`;
@@ -702,43 +677,54 @@ function setCustomDice() {
     // Reset per-roll state
     turnHistory = [];
     mustPlayAllDice = false;
-    tiePlayLargestOnly = false;
-    onlyOneDiePlayable = false;
-    forcedPlayableDie = null;
+    singleDieMode = false;
+    singleDieReason = null;
+    enforcedDie = null;
 
-    diceResultEl.textContent = `Dice: ${dice.join(', ')} (Total: ${dice.reduce((s,x)=>s+x,0)}) - ${currentTurn} to move. Click on a checker column to move.`;
+    // Helper to render the base message including the custom dice
+    const baseText = () =>
+        `Dice: ${dice.join(', ')} (Total: ${dice.reduce((a, b) => a + b, 0)}) - ${currentTurn} to move. ` +
+        `Click on a checker column to move.`;
 
-    // Apply same policy logic as rollDice
+    // Default base text
+    diceResultEl.textContent = baseText();
+
     const fullSequences = getAllValidMoveSequences();
     if (fullSequences.length > 0) {
         mustPlayAllDice = true;
-        diceResultEl.textContent += ` You must play all ${dice.length} dice before validating.`;
+        diceResultEl.textContent = `${baseText()} You must play all ${dice.length} dice before validating.`;
         return;
     }
 
     if (dice.length === 2 && dice[0] !== dice[1]) {
-        const dA = dice[0], dB = dice[1];
+        const [dA, dB] = dice;
         const playableA = validMoveExists(currentTurn, dA);
         const playableB = validMoveExists(currentTurn, dB);
 
         if (!playableA && !playableB) {
-            diceResultEl.textContent += ` No valid moves. You may validate or undo.`;
+            diceResultEl.textContent = `${baseText()} No valid moves. You may validate or undo.`;
         } else if (playableA && playableB) {
-            tiePlayLargestOnly = true;
-            const largest = Math.max(dA, dB);
-            if (dice[0] !== largest) dice.reverse();
-            diceResultEl.textContent = `Dice: ${dice.join(', ')} (Total: ${dice.reduce((s,x)=>s+x,0)}) - ${currentTurn} to move. Click on a checker column to move. Only one die may be played; must play the higher (${largest}) then you may validate.`;
+            // Must play higher only
+            singleDieMode = true;
+            singleDieReason = 'mustUseHigher';
+            enforcedDie = Math.max(dA, dB);
+            if (dice[0] !== enforcedDie) dice.reverse();
+            diceResultEl.textContent = `${baseText()} Only one die may be played; must play the higher (${enforcedDie}) then you may validate.`;
         } else {
-            onlyOneDiePlayable = true;
-            forcedPlayableDie = playableA ? dA : dB;
-            if (dice[0] !== forcedPlayableDie) dice.reverse();
-            diceResultEl.textContent = `Dice: ${dice.join(', ')} (Total: ${dice.reduce((s,x)=>s+x,0)}) - ${currentTurn} to move. Click on a checker column to move. Only one die can be played (${forcedPlayableDie}); after playing it you may validate.`;
+            // Only one die is playable
+            singleDieMode = true;
+            singleDieReason = 'onlyOnePlayable';
+            enforcedDie = playableA ? dA : dB;
+            if (dice[0] !== enforcedDie) dice.reverse();
+            diceResultEl.textContent = `${baseText()} Only one die can be played (${enforcedDie}); after playing it you may validate.`;
         }
     } else if (dice.length === 4) {
-        diceResultEl.textContent += ` No sequence uses all 4 dice; play as many as possible then validate.`;
+        diceResultEl.textContent = `${baseText()} No sequence uses all 4 dice; play as many as possible then validate.`;
     } else if (dice.length === 1) {
         if (!validMoveExists(currentTurn, dice[0])) {
-            diceResultEl.textContent += ` No valid move. You may validate or undo.`;
+            diceResultEl.textContent = `${baseText()} No valid move. You may validate or undo.`;
+        } else {
+            diceResultEl.textContent = baseText();
         }
     }
 }
