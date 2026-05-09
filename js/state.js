@@ -2,6 +2,7 @@ const humanPlayer = 'red';
 const computerPlayer = 'blue';
 const AI_MOVE_DELAY_MS = 700;
 const AI_SERVER_URL = 'http://localhost:8000/move';
+let aiMode = 'random';
 
 let currentTurn = humanPlayer; // Start with the red player
 let dice = [];

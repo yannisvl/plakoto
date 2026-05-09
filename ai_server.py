@@ -3,6 +3,11 @@ import random
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
+def run_model(payload):
+    # Placeholder for ML inference. Return one of payload['sequences'].
+    raise NotImplementedError('model_not_configured')
+
+
 class AiHandler(BaseHTTPRequestHandler):
     def _send_headers(self, status=200):
         self.send_response(status)
@@ -31,14 +36,36 @@ class AiHandler(BaseHTTPRequestHandler):
             return
 
         sequences = payload.get('sequences') or []
+        mode = payload.get('mode') or 'random'
         if not sequences:
             self._send_headers(200)
             self.wfile.write(b'{"choice":null}')
             return
 
-        choice = random.choice(sequences)
-        self._send_headers(200)
-        self.wfile.write(json.dumps({"choice": choice}).encode('utf-8'))
+        if mode == 'random':
+            choice = random.choice(sequences)
+            self._send_headers(200)
+            self.wfile.write(json.dumps({"choice": choice}).encode('utf-8'))
+            return
+
+        if mode == 'model':
+            try:
+                choice = run_model(payload)
+            except NotImplementedError:
+                self._send_headers(501)
+                self.wfile.write(b'{"error":"model_not_configured"}')
+                return
+            except Exception:
+                self._send_headers(500)
+                self.wfile.write(b'{"error":"model_error"}')
+                return
+
+            self._send_headers(200)
+            self.wfile.write(json.dumps({"choice": choice}).encode('utf-8'))
+            return
+
+        self._send_headers(400)
+        self.wfile.write(b'{"error":"invalid_mode"}')
 
 
 def run(host='127.0.0.1', port=8000):

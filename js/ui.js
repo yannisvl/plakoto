@@ -19,6 +19,15 @@ function setDiceMessage(restrictionText = '') {
     diceResultEl.textContent = text;
 }
 
+function setupAiModeControl() {
+    const select = document.getElementById('ai-mode');
+    if (!select) return;
+    aiMode = select.value || 'random';
+    select.addEventListener('change', () => {
+        aiMode = select.value || 'random';
+    });
+}
+
 function rollDice(instant = false) {
     if (gameOver) return; // no rolls after game end
     aiPlaying = false;
@@ -62,30 +71,14 @@ function rollDice(instant = false) {
     singleDieReason = null;
     enforcedDie = null;
 
-    const fullSequences = getAllValidMoveSequences();
+    const policy = computeMovePolicy(dice);
+    mustPlayAllDice = policy.mustPlayAllDice;
+    singleDieMode = policy.singleDieMode;
+    singleDieReason = policy.singleDieReason;
+    enforcedDie = policy.enforcedDie;
 
-    if (fullSequences.length > 0) {
-        mustPlayAllDice = true;
-    } else {
-        if (dice.length === 2 && dice[0] !== dice[1]) {
-            const [dA, dB] = dice;
-            const playableA = validMoveExists(currentTurn, dA);
-            const playableB = validMoveExists(currentTurn, dB);
-
-            if (playableA && playableB) {
-                // Both playable but cannot form a full sequence -> rule: use higher only
-                singleDieMode = true;
-                singleDieReason = 'mustUseHigher';
-                enforcedDie = Math.max(dA, dB);
-                if (dice[0] !== enforcedDie) dice.reverse();
-            } else if (playableA || playableB) {
-                // Exactly one playable
-                singleDieMode = true;
-                singleDieReason = 'onlyOnePlayable';
-                enforcedDie = playableA ? dA : dB;
-                if (dice[0] !== enforcedDie) dice.reverse();
-            }
-        }
+    if (singleDieMode && dice.length === 2 && dice[0] !== dice[1] && dice[0] !== enforcedDie) {
+        dice.reverse();
     }
 
     updateDiceMessage();
@@ -292,6 +285,7 @@ function updateBoardDisplay() {
 
 // Initialize the board and setup event listeners
 initializeBoard();
+setupAiModeControl();
 // Auto-roll at the beginning of the game (shows rolling effect)
 setTimeout(() => rollDice(), 200);
 

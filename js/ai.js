@@ -1,5 +1,6 @@
 async function requestAiMove(sequences) {
     const payload = {
+        mode: aiMode || 'random',
         sequences: sequences,
         state: {
             currentTurn: currentTurn,
@@ -63,7 +64,7 @@ async function computerPlayTurn() {
     } catch (err) {
         aiPlaying = false;
         if (typeof setDiceMessage === 'function') {
-            setDiceMessage('AI offline.');
+            setDiceMessage(aiMode === 'model' ? 'AI not ready.' : 'AI offline.');
         }
         return;
     }
