@@ -1,4 +1,39 @@
-function computerPlayTurn() {
+async function requestAiMove(sequences) {
+    const payload = {
+        sequences: sequences,
+        state: {
+            currentTurn: currentTurn,
+            dice: dice.slice(),
+            positions: {
+                red: positions.red.slice(),
+                blue: positions.blue.slice()
+            },
+            bearedOff: { ...bearedOff },
+            mustPlayAllDice: mustPlayAllDice,
+            singleDieMode: singleDieMode,
+            singleDieReason: singleDieReason,
+            enforcedDie: enforcedDie
+        }
+    };
+
+    const response = await fetch(AI_SERVER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+        throw new Error(`AI server error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (data && typeof data.index === 'number' && sequences[data.index]) {
+        return sequences[data.index];
+    }
+    return data ? data.choice : null;
+}
+
+async function computerPlayTurn() {
     if (gameOver || currentTurn !== computerPlayer) {
         aiPlaying = false;
         return;
@@ -22,7 +57,25 @@ function computerPlayTurn() {
         return;
     }
 
-    const choice = sequences[Math.floor(Math.random() * sequences.length)];
+    let choice = null;
+    try {
+        choice = await requestAiMove(sequences);
+    } catch (err) {
+        aiPlaying = false;
+        if (typeof setDiceMessage === 'function') {
+            setDiceMessage('AI offline.');
+        }
+        return;
+    }
+
+    if (!choice || !Array.isArray(choice.sequence) || !Array.isArray(choice.order)) {
+        aiPlaying = false;
+        if (typeof setDiceMessage === 'function') {
+            setDiceMessage('AI error.');
+        }
+        return;
+    }
+
     const sequence = choice.sequence.slice();
     dice = choice.order.slice();
 
