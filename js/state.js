@@ -2,7 +2,9 @@ const humanPlayer = 'red';
 const computerPlayer = 'blue';
 const AI_MOVE_DELAY_MS = 700;
 const AI_SERVER_URL = 'http://localhost:8000/move';
+const AI_RESULT_URL = 'http://localhost:8000/game_result';
 let aiMode = 'random';
+let gameId = `game-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 let currentTurn = humanPlayer; // Start with the red player
 let dice = [];

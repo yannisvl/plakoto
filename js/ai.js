@@ -1,6 +1,11 @@
 async function requestAiMove(sequences) {
+    if (aiMode === 'random') {
+        return sequences[Math.floor(Math.random() * sequences.length)];
+    }
+
     const payload = {
         mode: aiMode || 'random',
+        gameId: gameId,
         sequences: sequences,
         state: {
             currentTurn: currentTurn,
@@ -34,6 +39,33 @@ async function requestAiMove(sequences) {
     return data ? data.choice : null;
 }
 
+async function reportGameResult(winner) {
+    if (aiMode !== 'model' || !gameId) return;
+
+    const payload = {
+        gameId: gameId,
+        winner: winner,
+        state: {
+            currentTurn: currentTurn,
+            positions: {
+                red: positions.red.slice(),
+                blue: positions.blue.slice()
+            },
+            bearedOff: { ...bearedOff }
+        }
+    };
+
+    try {
+        await fetch(AI_RESULT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+    } catch (err) {
+        // The game result is best-effort so the browser game never gets stuck.
+    }
+}
+
 async function computerPlayTurn() {
     if (gameOver || currentTurn !== computerPlayer) {
         aiPlaying = false;
@@ -64,7 +96,7 @@ async function computerPlayTurn() {
     } catch (err) {
         aiPlaying = false;
         if (typeof setDiceMessage === 'function') {
-            setDiceMessage(aiMode === 'model' ? 'AI not ready.' : 'AI offline.');
+            setDiceMessage(aiMode === 'model' ? 'Model server offline.' : 'AI error.');
         }
         return;
     }

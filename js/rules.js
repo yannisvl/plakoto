@@ -24,6 +24,21 @@ function canBearOff(player) {
     return Engine.canBearOff(getEngineState(), player);
 }
 
+function finishGame(winner) {
+    if (!winner || gameOver) return;
+
+    gameOver = true;
+    if (typeof reportGameResult === 'function') {
+        reportGameResult(winner);
+    }
+
+    if (winner === 'draw') {
+        alert('Game over - draw.');
+    } else {
+        alert(`Game over - ${winner.toUpperCase()} wins!`);
+    }
+}
+
 function validMoveExists(player, step) {
     return Engine.validMoveExists(getEngineState(), player, step);
 }
@@ -32,25 +47,22 @@ function bearOff(player, fromIndex, steps) {
     const state = getEngineState();
     const moved = Engine.bearOff(state, player, fromIndex, steps);
     if (moved) {
-        const winner = Engine.checkForWinner(state);
-        if (winner) {
-            gameOver = true;
-            alert(`Game over - ${winner.toUpperCase()} wins!`);
-        }
+        finishGame(Engine.checkForWinner(state));
     }
     return moved;
 }
 
 function moveChecker(player, fromIndex, steps) {
-    return Engine.moveChecker(getEngineState(), player, fromIndex, steps);
+    const state = getEngineState();
+    const moved = Engine.moveChecker(state, player, fromIndex, steps);
+    if (moved) {
+        finishGame(Engine.checkForWinner(state));
+    }
+    return moved;
 }
 
 function checkForWinner() {
-    const winner = Engine.checkForWinner(getEngineState());
-    if (winner) {
-        gameOver = true;
-        alert(`Game over - ${winner.toUpperCase()} wins!`);
-    }
+    finishGame(Engine.checkForWinner(getEngineState()));
 }
 
 function getAllValidMoveSequences() {
@@ -59,6 +71,10 @@ function getAllValidMoveSequences() {
 
 function getValidMoveSequencesWithOrder(diceValues, requireFull) {
     return Engine.getValidMoveSequencesWithOrder(getEngineState(), diceValues, requireFull);
+}
+
+function getLegalMoveSequencesForCurrentTurn() {
+    return Engine.getLegalSequences(getEngineState(), dice).sequences;
 }
 
 function computeMovePolicy(diceValues) {

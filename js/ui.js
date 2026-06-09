@@ -28,6 +28,23 @@ function setupAiModeControl() {
     });
 }
 
+function getCurrentLegalSequences() {
+    if (!dice || dice.length === 0) return [];
+    return getLegalMoveSequencesForCurrentTurn();
+}
+
+function getLegalSequencesForCurrentDie() {
+    return getCurrentLegalSequences().filter(choice => {
+        return choice && Array.isArray(choice.order) && choice.order[0] === dice[0];
+    });
+}
+
+function canUseCurrentDieFrom(pointIndex) {
+    return getLegalSequencesForCurrentDie().some(choice => {
+        return Array.isArray(choice.sequence) && choice.sequence[0] === pointIndex;
+    });
+}
+
 function rollDice(instant = false) {
     if (gameOver) return; // no rolls after game end
     aiPlaying = false;
@@ -123,6 +140,19 @@ function handlePointClick(pointIndex) {
             }
         }
 
+        const legalSequences = getCurrentLegalSequences();
+        if (legalSequences.length === 0) {
+            alert('No legal move. Validate.');
+            return;
+        }
+        if (!canUseCurrentDieFrom(pointIndex)) {
+            const hasOtherOrder = legalSequences.some(choice => {
+                return choice && Array.isArray(choice.order) && choice.order[0] !== dice[0];
+            });
+            alert(hasOtherOrder ? 'Swap dice for that move.' : 'That move leaves required dice unused.');
+            return;
+        }
+
         saveTurnState();
 
         const steps = dice[0];
@@ -192,11 +222,8 @@ function validateMoves(fromAI = false) {
         return;
     }
     // Confirm the player's moves for this turn and switch to the next player
-    if (
-        dice.length === 0 ||
-        !dice.some(d => validMoveExists(currentTurn, d)) ||
-        (singleDieMode && dice.length <= 1)
-    ) {
+    const legalSequences = getCurrentLegalSequences();
+    if (dice.length === 0 || legalSequences.length === 0 || (singleDieMode && dice.length <= 1)) {
         turnHistory = [];
         currentTurn = currentTurn === humanPlayer ? computerPlayer : humanPlayer;
         diceRolledThisTurn = false;
@@ -212,7 +239,7 @@ function validateMoves(fromAI = false) {
 function swapDice() {
     if (currentTurn !== humanPlayer || aiPlaying) return;
     if (dice.length <= 1) return;
-    if (singleDieMode && singleDieReason === 'onlyOnePlayable') {
+    if (singleDieMode) {
         alert(`Swap disabled (${enforcedDie} only).`);
         return;
     }
@@ -230,12 +257,16 @@ function updateDiceMessage() {
     }
 
     let restriction = '';
-    const hasMoves = dice.length > 0 && dice.some(d => validMoveExists(currentTurn, d));
+    const legalSequences = getCurrentLegalSequences();
+    const hasMoves = legalSequences.length > 0;
+    const currentDiePlayable = getLegalSequencesForCurrentDie().length > 0;
 
     if (dice.length === 0) {
         restriction = 'Validate.';
     } else if (!hasMoves) {
         restriction = 'No moves. Validate.';
+    } else if (!currentDiePlayable) {
+        restriction = 'Swap dice.';
     } else if (singleDieMode && dice.length >= 2) {
         if (singleDieReason === 'mustUseHigher') {
             restriction = `Higher only (${enforcedDie}).`;
