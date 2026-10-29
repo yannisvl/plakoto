@@ -1,38 +1,61 @@
-# Plakoto
+# Plakoto — rules engine and learning opponent
 
-Browser Plakoto game for a human red player against a blue computer player.
+A browser implementation of the Plakoto backgammon variant, with a random opponent and an optional policy trained through self-play.
 
-## Modes
+## Algorithmic focus
 
-- Random moves: runs entirely in the browser and chooses one legal computer move sequence at random.
-- RL model: requires `ai_server.py`. The server chooses blue moves with a trainable policy and updates the policy after each completed game.
+The JavaScript engine enumerates legal move sequences, including pinning, bearing off and mother-piece outcomes. A Python policy scores legal choices using hand-built state/action/transition features, samples through a softmax distribution and updates weights from game outcomes. The model is a linear policy, not a deep neural network.
 
-## Run
+```mermaid
+flowchart LR
+    A[Board and dice] --> B[JavaScript legal-move engine]
+    B --> C[Random choice or learned policy]
+    C --> D[Apply legal sequence]
+    D --> E[Game outcome]
+    E --> F[Policy update]
+```
 
-Open `index.html` in a browser for random mode.
+## Play
 
-For RL model mode, start the AI server first:
+Open `index.html` in a browser and choose random mode. This mode needs no Python server.
 
-```powershell
+For the learning opponent, run from the repository root:
+
+```bash
 python ai_server.py
 ```
 
-Then open `index.html` and choose `RL model`.
+Then open `index.html` and choose **RL model**. The current implementation uses Python's standard library. Its policy is saved to `models/policy.json`; `PLAKOTO_MODEL_PATH` can override that location. The tracked `policy.pt` is not the current JSON policy format.
 
-The online model is saved to `models/policy.json`. You can override the path with `PLAKOTO_MODEL_PATH`.
+## Self-play
 
-## Optional Self-Play Training
+Requires Node.js and Python 3. Start the rule-engine service:
 
-Start the JS rules environment:
-
-```powershell
+```bash
 node env_server.js
 ```
 
-In another terminal, train the same policy file:
+In another terminal:
 
-```powershell
-python ml/train_policy.py --episodes 100
+```bash
+python ml/train_policy.py --episodes 100 --seed 7
 ```
 
-The trainer and live server both use the shared rule engine through legal move sequences, so the model never chooses outside the Plakoto rules.
+Avoid training and playing against the same policy file simultaneously, since both processes can save updates.
+
+## Tests
+
+```bash
+node tests/engine.test.js
+node tests/ui-smoke.test.js
+```
+
+## Code guide and limitations
+
+- `js/engine.js`: rules and legal sequences.
+- `ml/policy_model.py`: feature extraction, action selection and learning.
+- `ml/train_policy.py`: self-play driver.
+- `ai_server.py`: interface between the browser and policy.
+- `env_server.js`: rule-engine API for training.
+
+This is an experimental game-learning implementation. No comparison against expert play or statistically evaluated playing-strength claim is included. Tests cover selected rule cases and a simulated interface smoke check, not every reachable game state.
