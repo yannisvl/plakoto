@@ -2,6 +2,9 @@
 
 A browser implementation of the Plakoto backgammon variant, with a random opponent and an optional policy trained through self-play.
 
+<img width="761" height="472" alt="image" src="https://github.com/user-attachments/assets/a5b13d61-ad69-4a87-811d-ad806d8b8970" />
+
+
 ## Algorithmic focus
 
 The JavaScript engine enumerates legal move sequences, including pinning, bearing off and mother-piece outcomes. A Python policy scores legal choices using hand-built state/action/transition features, samples through a softmax distribution and updates weights from game outcomes. The model is a linear policy, not a deep neural network.
